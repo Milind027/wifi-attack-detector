@@ -1,0 +1,10 @@
+scapy
+PyQt5
+PyQtChart
+bcrypt
+cryptography
+python-dotenv
+PyYAML
+google-auth
+google-auth-oauthlib
+google-api-python-client

@@ -1,0 +1,117 @@
+# WiFi Attack Detector — Configuration Example
+# Copy this file to config.yaml and update the values for your system.
+
+paths:
+  # Base project directory (where DB, keys, and logs are stored)
+  project_dir: "/path/to/your/project"
+
+  # Database file name (relative to project_dir)
+  database: "wifi_attacks.db"
+
+  # Encryption key file name (relative to project_dir)
+  encryption_key: "encryption_key.bin"
+
+  # Google OAuth credentials file (relative to project_dir)
+  credentials_file: "credentials.json"
+
+  # Log file name (relative to project_dir)
+  log_file: "wifi_monitor.log"
+
+wifi:
+  # Default wireless interface
+  interface: "wlan0"
+
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "DEBUG"
+
+  # Max log file size in bytes (10 MB = 10485760)
+  max_bytes: 10485760
+
+  # Number of backup log files to keep
+  backup_count: 3
+
+threshold:
+  # Number of deauth packets required to trigger an alert
+  deauth_count: 10
+
+  # Time window in seconds for the sliding window
+  deauth_window: 5
+
+evil_twin:
+  # Enable Evil Twin / Rogue AP detection
+  enabled: true
+
+  # Trusted APs: list of known SSID→BSSID pairs.
+  # If an SSID appears with an unknown BSSID, an alert is raised.
+  # Leave empty to auto-learn APs on first run.
+  trusted_aps:
+    # - ssid: "MyHomeWiFi"
+    #   bssid: "AA:BB:CC:DD:EE:FF"
+
+probe_flood:
+  # Enable probe request flood detection
+  enabled: true
+
+  # Number of probe requests from same MAC to trigger alert
+  count: 50
+
+  # Time window in seconds
+  window: 10
+
+beacon_flood:
+  # Enable beacon flood detection
+  enabled: true
+
+  # Number of beacons from same BSSID to trigger alert
+  count: 100
+
+  # Time window in seconds
+  window: 5
+
+pmkid:
+  # Enable PMKID attack detection (EAPOL key message flood)
+  enabled: true
+
+  # Number of EAPOL key messages from same source to trigger alert
+  count: 5
+
+  # Time window in seconds
+  window: 10
+
+telegram:
+  # Enable Telegram bot alerts
+  enabled: false
+
+  # Bot token from @BotFather
+  bot_token: ""
+
+  # Your chat ID (get it from @userinfobot)
+  chat_id: ""
+
+ntfy:
+  # Enable ntfy.sh push notifications
+  enabled: false
+
+  # ntfy.sh topic URL (e.g. https://ntfy.sh/my-wifi-alerts)
+  # Use a unique, hard-to-guess topic name for security
+  topic: "https://ntfy.sh/wifi-attack-detector"
+
+  # Priority: 1=min, 2=low, 3=default, 4=high, 5=urgent
+  default_priority: 4
+
+twilio:
+  # Enable Twilio SMS alerts
+  enabled: false
+
+  # Account SID from Twilio console
+  account_sid: ""
+
+  # Auth token from Twilio console
+  auth_token: ""
+
+  # Your Twilio phone number (e.g. +1234567890)
+  from_number: ""
+
+  # Recipient phone number (e.g. +1234567890)
+  to_number: ""
