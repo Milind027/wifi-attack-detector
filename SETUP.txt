@@ -1,0 +1,304 @@
+================================================================================
+  WiFi Attack Detector — Linux Setup Guide
+================================================================================
+
+  This guide covers: cloning, virtual environment, dependencies, configuration,
+  creating your user account, and running the app.
+
+================================================================================
+  STEP 1: PREREQUISITES
+================================================================================
+
+  You need these installed on your Linux system:
+
+    sudo apt update
+    sudo apt install -y python3 python3-pip python3-venv git aircrack-ng \
+                        libqt5widgets5 libqt5gui5 libqt5core5a \
+                        fonts-ibm-plex
+
+  NOTE: You need a WiFi adapter that supports monitor mode.
+  Common chipsets: Atheros AR9271, Ralink RT3070, Alfa AWUS036ACH
+
+
+================================================================================
+  STEP 2: CLONE THE REPOSITORY
+================================================================================
+
+    cd ~
+    git clone https://github.com/Milind027/wifi-attack-detector.git
+    cd wifi-attack-detector
+
+
+================================================================================
+  STEP 3: CREATE A VIRTUAL ENVIRONMENT
+================================================================================
+
+    python3 -m venv venv
+    source venv/bin/activate
+
+  You should see (venv) in your terminal prompt now.
+
+  To deactivate later:     deactivate
+  To reactivate later:     source ~/wifi-attack-detector/venv/bin/activate
+
+
+================================================================================
+  STEP 4: INSTALL DEPENDENCIES
+================================================================================
+
+    pip install --upgrade pip
+    pip install -r requirements.txt
+
+  If PyQt5 fails, try:
+    sudo apt install -y python3-pyqt5 python3-pyqt5.qtchart
+    pip install scapy bcrypt cryptography python-dotenv PyYAML \
+                google-auth google-auth-oauthlib google-api-python-client
+
+
+================================================================================
+  STEP 5: CONFIGURE THE PROJECT
+================================================================================
+
+  5a. Create config.yaml
+  ──────────────────────
+    cp config.yaml.example config.yaml
+    nano config.yaml
+
+  Update the project_dir to your actual path:
+
+    paths:
+      project_dir: "/home/YOUR_USERNAME/wifi-attack-detector"
+
+  Update the WiFi interface (find yours with: iwconfig):
+
+    wifi:
+      interface: "wlan0"
+
+  Save and exit (Ctrl+X, Y, Enter).
+
+
+  5b. Create .env file (for notification secrets)
+  ────────────────────────────────────────────────
+    cp .env.example .env
+    nano .env
+
+  Fill in ONLY the services you want to use:
+
+    # Gmail — use App Password, NOT your real password
+    # Go to: https://myaccount.google.com/apppasswords
+    SENDER_EMAIL=your_email@gmail.com
+    SENDER_PASSWORD=xxxx_xxxx_xxxx_xxxx
+
+    # Telegram — get token from @BotFather, chat ID from @userinfobot
+    TELEGRAM_BOT_TOKEN=123456789:ABCdefGHI...
+    TELEGRAM_CHAT_ID=987654321
+
+    # ntfy.sh — pick a unique secret topic name
+    NTFY_TOPIC=https://ntfy.sh/my-secret-wifi-alerts
+
+    # Twilio SMS — from twilio.com/console
+    TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    TWILIO_AUTH_TOKEN=your_auth_token
+    TWILIO_FROM_NUMBER=+1234567890
+    TWILIO_TO_NUMBER=+0987654321
+
+  Save and exit.
+
+
+  5c. Enable notification channels in config.yaml
+  ────────────────────────────────────────────────
+  Set "enabled: true" for any channels you configured:
+
+    telegram:
+      enabled: true
+
+    ntfy:
+      enabled: true
+
+    twilio:
+      enabled: true
+
+
+================================================================================
+  STEP 6: SET UP YOUR USER ACCOUNT (PASSWORD)
+================================================================================
+
+  When you run the app for the first time, you'll see a Login Dialog.
+
+    → Click "Sign Up" / "Register"
+    → Enter your desired username
+    → Enter your desired password
+    → Enter your notification email (the email where you want alerts)
+    → Click Register
+
+  Your credentials are stored securely:
+    - Passwords are hashed with bcrypt (never stored in plain text)
+    - Email passwords are encrypted with Fernet (AES-128)
+    - Encryption key is saved in encryption_key.bin
+
+  IMPORTANT: Keep encryption_key.bin safe — if you lose it, encrypted
+  data cannot be recovered.
+
+
+================================================================================
+  STEP 7: PUT YOUR WIFI ADAPTER INTO MONITOR MODE
+================================================================================
+
+    # Find your interface name
+    iwconfig
+
+    # Kill processes that might interfere
+    sudo airmon-ng check kill
+
+    # Enable monitor mode
+    sudo airmon-ng start wlan0
+
+    # Your interface is now "wlan0mon" (or similar)
+    # Verify with:
+    iwconfig
+
+
+================================================================================
+  STEP 8: RUN THE APPLICATION
+================================================================================
+
+    # Must run as root for packet sniffing
+    sudo venv/bin/python main.py
+
+  Or if venv is activated:
+    sudo $(which python) main.py
+
+  The login dialog will appear → log in → the modern wifiwatch GUI opens.
+  Click "start" in the top bar to begin monitoring.
+
+
+================================================================================
+  STEP 9: GOOGLE DRIVE BACKUP (OPTIONAL)
+================================================================================
+
+  To enable automatic log backup to Google Drive:
+
+  1. Go to https://console.cloud.google.com/
+  2. Create a new project
+  3. Enable "Google Drive API"
+  4. Create OAuth 2.0 credentials (Desktop App type)
+  5. Download the JSON file and save it as:
+       ~/wifi-attack-detector/credentials.json
+  6. In the app, go to Settings → Click "connect google drive"
+  7. A browser window will open for Google OAuth — authorize it
+  8. Logs will auto-upload to Drive every hour
+
+
+================================================================================
+  STEP 10: RUN ON STARTUP (OPTIONAL)
+================================================================================
+
+  To auto-start on boot using systemd:
+
+    sudo nano /etc/systemd/system/wifiwatch.service
+
+  Paste:
+
+    [Unit]
+    Description=WiFi Attack Detector
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=root
+    WorkingDirectory=/home/YOUR_USERNAME/wifi-attack-detector
+    ExecStart=/home/YOUR_USERNAME/wifi-attack-detector/venv/bin/python main.py
+    Restart=on-failure
+    Environment=DISPLAY=:0
+
+    [Install]
+    WantedBy=multi-user.target
+
+  Then:
+    sudo systemctl daemon-reload
+    sudo systemctl enable wifiwatch.service
+    sudo systemctl start wifiwatch.service
+
+  Check status:
+    sudo systemctl status wifiwatch.service
+
+
+================================================================================
+  QUICK REFERENCE COMMANDS
+================================================================================
+
+    # Activate venv
+    cd ~/wifi-attack-detector && source venv/bin/activate
+
+    # Start monitor mode
+    sudo airmon-ng check kill && sudo airmon-ng start wlan0
+
+    # Run the app
+    sudo venv/bin/python main.py
+
+    # Stop monitor mode when done
+    sudo airmon-ng stop wlan0mon
+
+    # Restore network
+    sudo systemctl restart NetworkManager
+
+    # Export logs manually
+    # Use the "export csv" / "export pdf" buttons in the GUI
+
+    # Check logs
+    tail -f wifi_monitor.log
+
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+  Q: "No module named PyQt5"
+  A: sudo apt install python3-pyqt5 python3-pyqt5.qtchart
+
+  Q: "Permission denied" when sniffing
+  A: Run with sudo: sudo venv/bin/python main.py
+
+  Q: WiFi adapter not detected
+  A: Check: lsusb | grep -i wireless
+     Install driver if needed for your chipset.
+
+  Q: "config.yaml not found"
+  A: cp config.yaml.example config.yaml
+     Edit project_dir to your actual path.
+
+  Q: GUI looks broken / no fonts
+  A: sudo apt install fonts-ibm-plex
+     Or the app will fall back to system monospace.
+
+  Q: "airmon-ng: command not found"
+  A: sudo apt install aircrack-ng
+
+  Q: Network not working after stopping
+  A: sudo airmon-ng stop wlan0mon
+     sudo systemctl restart NetworkManager
+
+
+================================================================================
+  FILE STRUCTURE
+================================================================================
+
+    wifi-attack-detector/
+    ├── main.py              ← Entry point (run this)
+    ├── gui.py               ← Modern wifiwatch GUI
+    ├── wifi_detector.py     ← Packet sniffing & attack detection
+    ├── database.py          ← SQLite database (attacks, users, threats)
+    ├── auth.py              ← Login / registration dialog
+    ├── config.py            ← Config loader
+    ├── config.yaml          ← YOUR config (create from .example)
+    ├── .env                 ← YOUR secrets (create from .example)
+    ├── notifier.py          ← Email alerts
+    ├── telegram_notifier.py ← Telegram alerts
+    ├── ntfy_notifier.py     ← ntfy.sh push alerts
+    ├── twilio_notifier.py   ← SMS alerts
+    ├── drive_uploader.py    ← Google Drive backup
+    ├── oui_lookup.py        ← MAC vendor lookup
+    ├── requirements.txt     ← Python dependencies
+    └── encryption_key.bin   ← Auto-generated encryption key
+
+================================================================================
