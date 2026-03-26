@@ -1,4 +1,4 @@
-# 🛡️ WiFi Attack Detector
+# 🛡️ Wi-Fi Attack Detector
 
 A Linux-based cybersecurity tool that detects WiFi deauthentication attacks in real-time using Scapy and PyQt5.
 
