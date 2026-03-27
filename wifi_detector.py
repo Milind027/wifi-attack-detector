@@ -80,6 +80,10 @@ class SniffThread(QThread):
             if attack_info:
                 sev = attack_info.get("severity", "medium")
                 if sev == "high" or (now - self.last_attack_emit) > 1.0:
+                    try:
+                        self.detector.db.flush_attacks()
+                    except Exception as e:
+                        logging.error(f"Failed to flush DB before GUI signal: {e}")
                     self.attack_signal.emit(attack_info)
                     self.last_attack_emit = now
                     

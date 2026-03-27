@@ -26,6 +26,7 @@
 
     cd ~
     git clone https://github.com/Milind027/wifi-attack-detector.git
+    git clone https://github.com/Milind027/wifi-attack-detector.git
     cd wifi-attack-detector
 
 
