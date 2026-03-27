@@ -392,10 +392,10 @@ class WiFiDetector:
         if not self.check_monitor_mode():
             self.enable_monitor_mode()
 
-    def send_notification(self, message):
+    def send_notification(self, title, message):
         try:
             subprocess.Popen(
-                ["notify-send", "Deauth Attack Detected", message],
+                ["notify-send", "-i", "dialog-warning", title, message],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
         except Exception:
@@ -454,7 +454,7 @@ class WiFiDetector:
                 log_msg = (f"Evil Twin detected! SSID '{ssid}' has new BSSID {bssid}. "
                            f"Known BSSIDs: {known_bssids}")
                 logging.warning(log_msg)
-                self.send_notification(f"[HIGH] Evil Twin: '{ssid}' from {bssid}")
+                self.send_notification("Evil Twin Detected", f"[HIGH] '{ssid}' from {bssid}")
                 self._send_alerts_async(
                     "Evil Twin / Rogue AP Alert [HIGH]",
                     f"SSID: {ssid}\nNew BSSID: {bssid}\n"
@@ -480,7 +480,7 @@ class WiFiDetector:
                 self.attacks.append(attack)
                 log_msg = f"Beacon flood from {bssid} / '{ssid}' ({self.beacon_flood_count} beacons in {self.beacon_flood_window}s)"
                 logging.warning(log_msg)
-                self.send_notification(f"[MEDIUM] Beacon flood: {bssid} ('{ssid}')")
+                self.send_notification("Beacon Flood Detected", f"[MEDIUM] {bssid} ('{ssid}')")
                 self._send_alerts_async(
                     "Beacon Flood Alert [MEDIUM]",
                     f"BSSID: {bssid}\nSSID: {ssid}\n{log_msg}",
@@ -513,7 +513,7 @@ class WiFiDetector:
             if self._check_threshold(src):
                 log_msg = f"{timestamp} | {attack_type} ({severity}) | {src} | {dst} | {ssid}"
                 logging.info(f"Deauth ALERT (threshold crossed): {log_msg}")
-                self.send_notification(f"[{severity.upper()}] {attack_type}: {src} -> {dst}")
+                self.send_notification(f"{attack_type.replace('_', ' ').title()} Detected", f"[{severity.upper()}] {src} -> {dst}")
                 self._send_alerts_async(
                     f"WiFi Deauth Attack Alert [{severity.upper()}]",
                     f"Type: {attack_type}\nSeverity: {severity}\n"
@@ -543,7 +543,7 @@ class WiFiDetector:
                 self.attacks.append(attack)
                 log_msg = f"Probe flood from {src} ({self.probe_flood_count} probes in {self.probe_flood_window}s)"
                 logging.warning(log_msg)
-                self.send_notification(f"[MEDIUM] Probe flood: {src}")
+                self.send_notification("Probe Flood Detected", f"[MEDIUM] {src}")
                 self._send_alerts_async(
                     "Probe Request Flood Alert [MEDIUM]",
                     f"Source: {src}\nSSID requested: {ssid_requested}\n{log_msg}",
@@ -569,7 +569,7 @@ class WiFiDetector:
                 self.attacks.append(attack)
                 log_msg = f"PMKID attack from {src} ({self.pmkid_count} EAPOL messages in {self.pmkid_window}s)"
                 logging.warning(log_msg)
-                self.send_notification(f"[HIGH] PMKID attack: {src}")
+                self.send_notification("PMKID Attack Detected", f"[HIGH] {src}")
                 self._send_alerts_async(
                     "PMKID Attack Alert [HIGH]",
                     f"Source: {src}\nTarget: {dst}\nSSID: {ssid}\n{log_msg}\n"

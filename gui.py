@@ -1008,6 +1008,7 @@ class WiFiMonitorGUI(QMainWindow):
         """Lightweight slot called on main thread when attack detected."""
         self.update_logs()
         self.update_stats()
+        self._update_analytics()
         sev = attack.get("severity", "medium")
         if sev == "high":
             atype = attack.get("attack_type", "attack")
@@ -1026,6 +1027,7 @@ class WiFiMonitorGUI(QMainWindow):
             return
         self.update_logs()
         self.update_stats()
+        self._update_analytics()
 
     def update_logs(self):
         logs = self.db.get_recent_logs(50)
