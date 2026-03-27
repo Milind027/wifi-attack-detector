@@ -3,11 +3,15 @@ import logging
 import zipfile
 import datetime
 import json
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+try:
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    GOOGLE_API_AVAILABLE = True
+except ImportError:
+    GOOGLE_API_AVAILABLE = False
 from database import Database
 from config import CREDENTIALS_PATH
 
@@ -31,6 +35,7 @@ class DriveUploader:
         logging.debug(f"DriveUploader username set to {username}")
 
     def check_existing_token(self, username):
+        if not GOOGLE_API_AVAILABLE: return False
         token = self.db.get_drive_token(username)
         if token:
             try:
@@ -64,6 +69,9 @@ class DriveUploader:
         return False
 
     def authenticate(self, username):
+        if not GOOGLE_API_AVAILABLE:
+            logging.error("Google APIs not installed. Run: pip install google-auth-oauthlib google-api-python-client")
+            return False
         if self.check_existing_token(username):
             return True
         try:
@@ -105,6 +113,8 @@ class DriveUploader:
         return zip_path
 
     def upload_logs(self, username, log_dir):
+        if not GOOGLE_API_AVAILABLE:
+            return False
         if not username:
             logging.debug("No username; skipping Drive upload")
             return False

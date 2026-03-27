@@ -56,6 +56,8 @@ class SniffThread(QThread):
         self.interface = interface
         self.detector = detector
         self.running = False
+        self.last_attack_emit = 0
+        self.last_ap_emit = 0
         logging.debug(f"Sniff-thread initialized for {interface}")
 
     def run(self):
@@ -74,11 +76,17 @@ class SniffThread(QThread):
         try:
             # Run ALL detection logic in this background thread
             attack_info = self.detector.packet_handler(packet)
-            # Emit lightweight signals for UI refresh
+            now = time.time()
             if attack_info:
-                self.attack_signal.emit(attack_info)
+                sev = attack_info.get("severity", "medium")
+                if sev == "high" or (now - self.last_attack_emit) > 1.0:
+                    self.attack_signal.emit(attack_info)
+                    self.last_attack_emit = now
+                    
             if packet.haslayer(Dot11Beacon):
-                self.ap_update_signal.emit()
+                if (now - self.last_ap_emit) > 2.0:
+                    self.ap_update_signal.emit()
+                    self.last_ap_emit = now
         except Exception as e:
             logging.error(f"Packet processing error: {e}")
 
@@ -613,4 +621,16 @@ class WiFiDetector:
     def stop_monitoring(self):
         self.sniff_thread.stop()
         logging.info("Monitoring stopped")
+
+    def set_threshold(self, count: int, window: int):
+        self.threshold_count = count
+        self.threshold_window = window
+        logging.info(f"Threshold updated to {count} packets in {window} seconds")
+
+    def set_interface(self, interface: str):
+        self.base_interface = interface
+        self.interface = f"{interface}mon"
+        if hasattr(self, 'sniff_thread'):
+            self.sniff_thread.interface = self.interface
+        logging.info(f"Interface updated to {self.base_interface}")
 

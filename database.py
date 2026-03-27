@@ -232,6 +232,23 @@ class Database:
         self.conn.commit()
         logging.info(f"Cleared Drive token for {username}")
 
+    def export_to_csv(self, file_path):
+        import csv
+        self.flush_attacks()
+        try:
+            self.cursor.execute('SELECT * FROM attacks ORDER BY timestamp DESC')
+            rows = self.cursor.fetchall()
+            headers = [description[0] for description in self.cursor.description]
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+            logging.info(f"Exported logs to CSV: {file_path}")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to export CSV: {e}")
+            return False
+
     def close(self):
         self.flush_attacks()
         self.conn.close()
