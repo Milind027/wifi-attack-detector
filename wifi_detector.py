@@ -3,6 +3,7 @@ import subprocess
 import time
 import logging
 import collections
+import threading
 from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 from scapy.all import *
@@ -42,11 +43,18 @@ OFFICIAL_SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 OFFICIAL_SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
 
 class SniffThread(QThread):
-    packet_signal = pyqtSignal(object)
+    """Background thread for packet sniffing and processing.
+    
+    Processes packets entirely in the background thread.
+    Only emits lightweight signals for UI updates.
+    """
+    attack_signal = pyqtSignal(dict)    # emitted when attack detected
+    ap_update_signal = pyqtSignal()     # emitted when nearby_aps changed
 
-    def __init__(self, interface):
+    def __init__(self, interface, detector=None):
         super().__init__()
         self.interface = interface
+        self.detector = detector
         self.running = False
         logging.debug(f"Sniff-thread initialized for {interface}")
 
@@ -54,13 +62,25 @@ class SniffThread(QThread):
         self.running = True
         logging.debug(f"Sniff thread running on {self.interface}")
         try:
-            sniff(iface=self.interface, prn=self.packet_handler, store=0, stop_filter=lambda p: not self.running)
+            sniff(iface=self.interface, prn=self._process_packet, store=0,
+                  stop_filter=lambda p: not self.running)
         except Exception as e:
             logging.error(f"Sniff error: {e}")
 
-    def packet_handler(self, packet):
-        logging.debug(f"Emitting packet: {packet.summary()}")
-        self.packet_signal.emit(packet)
+    def _process_packet(self, packet):
+        """Process packet in background thread, emit signals for UI."""
+        if not self.detector:
+            return
+        try:
+            # Run ALL detection logic in this background thread
+            attack_info = self.detector.packet_handler(packet)
+            # Emit lightweight signals for UI refresh
+            if attack_info:
+                self.attack_signal.emit(attack_info)
+            if packet.haslayer(Dot11Beacon):
+                self.ap_update_signal.emit()
+        except Exception as e:
+            logging.error(f"Packet processing error: {e}")
 
     def stop(self):
         self.running = False
@@ -121,8 +141,7 @@ class WiFiDetector:
         receiver_email = self.db.get_email_config(self.username)[3] if self.username and self.db.get_email_config(self.username) else None
         logging.debug(f"Receiver email for {self.username}: {receiver_email}")
         self.notifier = WiFiNotifier(smtp_config, OFFICIAL_SENDER_EMAIL, OFFICIAL_SENDER_PASSWORD, receiver_email)
-        self.sniff_thread = SniffThread(self.interface)
-        self.sniff_thread.packet_signal.connect(self.packet_handler)
+        self.sniff_thread = SniffThread(self.interface, detector=self)
 
         # Telegram notifier
         if TELEGRAM_ENABLED:
@@ -374,10 +393,17 @@ class WiFiDetector:
             self.enable_monitor_mode()
 
     def send_notification(self, message):
-        os.system(f'notify-send "Deauth Attack Detected" "{message}"')
+        try:
+            subprocess.Popen(
+                ["notify-send", "Deauth Attack Detected", message],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except Exception:
+            pass
         logging.debug(f"Sent desktop notification: {message}")
 
     def packet_handler(self, packet):
+        """Process a packet. Returns attack dict if attack detected, else None."""
         logging.debug(f"Packet received: {packet.summary()}")
         if packet.haslayer(Dot11Beacon):
             bssid = packet.addr2
@@ -429,19 +455,15 @@ class WiFiDetector:
                            f"Known BSSIDs: {known_bssids}")
                 logging.warning(log_msg)
                 self.send_notification(f"[HIGH] Evil Twin: '{ssid}' from {bssid}")
-                if self.notifier.receiver_email:
-                    self.notifier.send_email(
-                        "Evil Twin / Rogue AP Alert [HIGH]",
-                        f"SSID: {ssid}\nNew BSSID: {bssid}\n"
-                        f"Known legitimate BSSIDs: {known_bssids}\n"
-                        f"This may be a rogue access point impersonating your network!"
-                    )
-                self.telegram.send_attack_alert("evil_twin", "high", bssid, "N/A", ssid,
-                    f"New BSSID detected. Known: {known_bssids}")
-                self.ntfy.send_attack_alert("evil_twin", "high", bssid, "N/A", ssid,
-                    f"New BSSID detected. Known: {known_bssids}")
-                self.twilio.send_attack_alert("evil_twin", "high", bssid, "N/A", ssid,
-                    f"New BSSID detected. Known: {known_bssids}")
+                self._send_alerts_async(
+                    "Evil Twin / Rogue AP Alert [HIGH]",
+                    f"SSID: {ssid}\nNew BSSID: {bssid}\n"
+                    f"Known legitimate BSSIDs: {known_bssids}\n"
+                    f"This may be a rogue access point impersonating your network!",
+                    "evil_twin", "high", bssid, "N/A", ssid,
+                    f"New BSSID detected. Known: {known_bssids}"
+                )
+                return attack
 
             # Beacon flood detection
             if self.beacon_flood_enabled and self._check_beacon_flood(bssid):
@@ -459,14 +481,12 @@ class WiFiDetector:
                 log_msg = f"Beacon flood from {bssid} / '{ssid}' ({self.beacon_flood_count} beacons in {self.beacon_flood_window}s)"
                 logging.warning(log_msg)
                 self.send_notification(f"[MEDIUM] Beacon flood: {bssid} ('{ssid}')")
-                if self.notifier.receiver_email:
-                    self.notifier.send_email(
-                        "Beacon Flood Alert [MEDIUM]",
-                        f"BSSID: {bssid}\nSSID: {ssid}\n{log_msg}"
-                    )
-                self.telegram.send_attack_alert("beacon_flood", "medium", bssid, "N/A", ssid, log_msg)
-                self.ntfy.send_attack_alert("beacon_flood", "medium", bssid, "N/A", ssid, log_msg)
-                self.twilio.send_attack_alert("beacon_flood", "medium", bssid, "N/A", ssid, log_msg)
+                self._send_alerts_async(
+                    "Beacon Flood Alert [MEDIUM]",
+                    f"BSSID: {bssid}\nSSID: {ssid}\n{log_msg}",
+                    "beacon_flood", "medium", bssid, "N/A", ssid, log_msg
+                )
+                return attack
         elif packet.haslayer(Dot11Deauth):
             src = packet.addr2
             dst = packet.addr1
@@ -494,20 +514,17 @@ class WiFiDetector:
                 log_msg = f"{timestamp} | {attack_type} ({severity}) | {src} | {dst} | {ssid}"
                 logging.info(f"Deauth ALERT (threshold crossed): {log_msg}")
                 self.send_notification(f"[{severity.upper()}] {attack_type}: {src} -> {dst}")
-                if self.notifier.receiver_email:
-                    self.notifier.send_email(
-                        f"WiFi Deauth Attack Alert [{severity.upper()}]",
-                        f"Type: {attack_type}\nSeverity: {severity}\n"
-                        f"Threshold crossed: {self.threshold_count} packets in {self.threshold_window}s\n{log_msg}"
-                    )
-                self.telegram.send_attack_alert(attack_type, severity, src, dst, ssid,
-                    f"Threshold: {self.threshold_count} packets in {self.threshold_window}s")
-                self.ntfy.send_attack_alert(attack_type, severity, src, dst, ssid,
-                    f"Threshold: {self.threshold_count} packets in {self.threshold_window}s")
-                self.twilio.send_attack_alert(attack_type, severity, src, dst, ssid,
-                    f"Threshold: {self.threshold_count} packets in {self.threshold_window}s")
+                self._send_alerts_async(
+                    f"WiFi Deauth Attack Alert [{severity.upper()}]",
+                    f"Type: {attack_type}\nSeverity: {severity}\n"
+                    f"Threshold crossed: {self.threshold_count} packets in {self.threshold_window}s\n{log_msg}",
+                    attack_type, severity, src, dst, ssid,
+                    f"Threshold: {self.threshold_count} packets in {self.threshold_window}s"
+                )
+                return attack
             else:
                 logging.debug(f"Deauth packet logged (below threshold): {attack_type} {src} -> {dst}")
+                return attack
 
         elif packet.haslayer(Dot11ProbeReq) and self.probe_flood_enabled:
             src = packet.addr2
@@ -527,14 +544,12 @@ class WiFiDetector:
                 log_msg = f"Probe flood from {src} ({self.probe_flood_count} probes in {self.probe_flood_window}s)"
                 logging.warning(log_msg)
                 self.send_notification(f"[MEDIUM] Probe flood: {src}")
-                if self.notifier.receiver_email:
-                    self.notifier.send_email(
-                        "Probe Request Flood Alert [MEDIUM]",
-                        f"Source: {src}\nSSID requested: {ssid_requested}\n{log_msg}"
-                    )
-                self.telegram.send_attack_alert("probe_flood", "medium", src, "N/A", ssid_requested, log_msg)
-                self.ntfy.send_attack_alert("probe_flood", "medium", src, "N/A", ssid_requested, log_msg)
-                self.twilio.send_attack_alert("probe_flood", "medium", src, "N/A", ssid_requested, log_msg)
+                self._send_alerts_async(
+                    "Probe Request Flood Alert [MEDIUM]",
+                    f"Source: {src}\nSSID requested: {ssid_requested}\n{log_msg}",
+                    "probe_flood", "medium", src, "N/A", ssid_requested, log_msg
+                )
+                return attack
 
         elif packet.haslayer(EAPOL) and self.pmkid_enabled:
             src = packet.addr2
@@ -555,18 +570,40 @@ class WiFiDetector:
                 log_msg = f"PMKID attack from {src} ({self.pmkid_count} EAPOL messages in {self.pmkid_window}s)"
                 logging.warning(log_msg)
                 self.send_notification(f"[HIGH] PMKID attack: {src}")
+                self._send_alerts_async(
+                    "PMKID Attack Alert [HIGH]",
+                    f"Source: {src}\nTarget: {dst}\nSSID: {ssid}\n{log_msg}\n"
+                    f"An attacker may be harvesting PMKID hashes for offline cracking!",
+                    "pmkid", "high", src, dst or "N/A", ssid,
+                    f"PMKID hash harvesting detected! {log_msg}"
+                )
+                return attack
+        return None
+
+    def _send_alerts_async(self, email_subject, email_body,
+                           attack_type, severity, src, dst, ssid, detail):
+        """Send all notifications in a background thread to avoid blocking the GUI."""
+        def _worker():
+            try:
                 if self.notifier.receiver_email:
-                    self.notifier.send_email(
-                        "PMKID Attack Alert [HIGH]",
-                        f"Source: {src}\nTarget: {dst}\nSSID: {ssid}\n{log_msg}\n"
-                        f"An attacker may be harvesting PMKID hashes for offline cracking!"
-                    )
-                self.telegram.send_attack_alert("pmkid", "high", src, dst or "N/A", ssid,
-                    f"PMKID hash harvesting detected! {log_msg}")
-                self.ntfy.send_attack_alert("pmkid", "high", src, dst or "N/A", ssid,
-                    f"PMKID hash harvesting detected! {log_msg}")
-                self.twilio.send_attack_alert("pmkid", "high", src, dst or "N/A", ssid,
-                    f"PMKID hash harvesting detected! {log_msg}")
+                    self.notifier.send_email(email_subject, email_body)
+            except Exception as e:
+                logging.error(f"Email alert failed: {e}")
+            try:
+                self.telegram.send_attack_alert(attack_type, severity, src, dst, ssid, detail)
+            except Exception as e:
+                logging.error(f"Telegram alert failed: {e}")
+            try:
+                self.ntfy.send_attack_alert(attack_type, severity, src, dst, ssid, detail)
+            except Exception as e:
+                logging.error(f"ntfy alert failed: {e}")
+            try:
+                self.twilio.send_attack_alert(attack_type, severity, src, dst, ssid, detail)
+            except Exception as e:
+                logging.error(f"Twilio alert failed: {e}")
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
 
     def start_monitoring(self):
         logging.info(f"Starting WiFi monitoring on {self.interface}")

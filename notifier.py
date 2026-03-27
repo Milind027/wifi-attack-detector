@@ -5,7 +5,6 @@ import os
 from logging.handlers import RotatingFileHandler
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from PyQt5.QtWidgets import QMessageBox
 
 # Configure logging with size-based rotation
 from config import PROJECT_DIR, LOG_PATH, LOG_LEVEL, LOG_MAX_BYTES, LOG_BACKUP_COUNT
@@ -86,9 +85,5 @@ class WiFiNotifier:
                     server.sendmail(self.sender_email, self.receiver_email, msg.as_string())
                     logging.info(f"Email sent to {self.receiver_email}: {subject}")
             except Exception as e:
-                error_msg = f"Failed to send email to {self.receiver_email}: {e}"
-                logging.error(error_msg)
-                try:
-                    QMessageBox.warning(None, "Email Error", error_msg)
-                except RuntimeError:
-                    print(error_msg)
+                logging.error(f"Failed to send email to {self.receiver_email}: {e}")
+

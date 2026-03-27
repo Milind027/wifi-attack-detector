@@ -3,6 +3,7 @@ import time
 import logging
 import csv
 import os
+import threading
 from collections import Counter
 from logging.handlers import RotatingFileHandler
 from PyQt5.QtWidgets import (
@@ -38,127 +39,160 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-# ── Palette ────────────────────────────────────────────────────────────────────
+# ── Hacker Palette ─────────────────────────────────────────────────────────────
 
 DARK = {
-    "bg": "#0c0c0c", "bg2": "#181818", "bg3": "#1f1f1f", "line": "#262626",
-    "txt": "#c8c8c8", "mute": "#4a4a4a", "mute2": "#666666",
-    "grn": "#4ec994", "red": "#e05656", "ylw": "#c8942a",
-    "pur": "#9d7cd8", "blue": "#5a8fd8",
+    "bg": "#050a0e", "bg2": "#0a1118", "bg3": "#0f1a24", "line": "#0d2137",
+    "txt": "#b8c4ce", "mute": "#2a4a5a", "mute2": "#3d6070",
+    "grn": "#00ff88", "red": "#ff3355", "ylw": "#ffaa00",
+    "pur": "#bf5af2", "blue": "#00d4ff", "track": "#0a1a28",
 }
 LIGHT = {
-    "bg": "#f7f6f2", "bg2": "#eeede8", "bg3": "#e5e4df", "line": "#d8d7d2",
-    "txt": "#1c1c1c", "mute": "#b0afa8", "mute2": "#888888",
-    "grn": "#2a7a4a", "red": "#c0392b", "ylw": "#8a6800",
-    "pur": "#6b4faa", "blue": "#3a6aaa",
+    "bg": "#e8eef2", "bg2": "#dce4ea", "bg3": "#cfd9e0", "line": "#b4c4d0",
+    "txt": "#0a1a28", "mute": "#7a8a9a", "mute2": "#5a6a7a",
+    "grn": "#00994d", "red": "#cc2244", "ylw": "#aa7700",
+    "pur": "#8040c0", "blue": "#0088bb", "track": "#c0ccd6",
 }
 
 
 def make_qss(p: dict) -> str:
     return f"""
+* {{ font-family:'IBM Plex Mono','Fira Code','Consolas',monospace; }}
 QMainWindow, QWidget#root {{ background:{p['bg']}; color:{p['txt']}; }}
-QWidget#sidebar {{ background:{p['bg']}; border-right:1px solid {p['line']}; }}
+QWidget#sidebar {{
+    background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 {p['bg']}, stop:1 {p['bg2']});
+    border-right:1px solid {p['line']};
+}}
 QPushButton#nav_btn {{
     background:transparent; border:none; border-radius:6px;
-    padding:9px; color:{p['mute']}; font-size:18px;
+    padding:9px; color:{p['mute2']}; font-size:18px;
 }}
-QPushButton#nav_btn:hover {{ background:{p['bg3']}; color:{p['txt']}; }}
-QPushButton#nav_btn[active="true"] {{ background:{p['bg3']}; color:{p['grn']}; }}
-QWidget#topbar {{ background:{p['bg']}; border-bottom:1px solid {p['line']}; }}
+QPushButton#nav_btn:hover {{ background:{p['bg3']}; color:{p['grn']}; }}
+QPushButton#nav_btn[active="true"] {{
+    background:{p['bg3']}; color:{p['grn']};
+    border-left:2px solid {p['grn']};
+}}
+QWidget#topbar {{
+    background:{p['bg']}; border-bottom:1px solid {p['line']};
+}}
 QLabel#status_label {{
-    color:{p['mute2']}; font-size:12px; font-family:'IBM Plex Mono',monospace;
+    color:{p['grn']}; font-size:12px; letter-spacing:1px;
 }}
 QLabel#app_title {{
-    color:{p['grn']}; font-size:13px; font-weight:600;
-    font-family:'IBM Plex Mono',monospace; letter-spacing:1px;
+    color:{p['grn']}; font-size:14px; font-weight:700;
+    letter-spacing:2px;
 }}
 QPushButton#top_btn {{
     background:{p['bg3']}; border:1px solid {p['line']}; border-radius:4px;
-    color:{p['mute2']}; font-size:11px; font-family:'IBM Plex Mono',monospace;
-    padding:4px 12px; min-width:60px;
+    color:{p['mute2']}; font-size:11px; padding:4px 14px; min-width:60px;
 }}
-QPushButton#top_btn:hover {{ border-color:{p['mute']}; color:{p['txt']}; }}
+QPushButton#top_btn:hover {{ border-color:{p['grn']}; color:{p['grn']}; }}
 QPushButton#stop_btn {{
     background:transparent; border:1px solid {p['line']}; border-radius:4px;
-    color:{p['red']}; font-size:11px; font-family:'IBM Plex Mono',monospace;
-    padding:4px 14px; min-width:60px;
+    color:{p['red']}; font-size:11px; padding:5px 16px; min-width:70px;
+    font-weight:700; letter-spacing:1px;
 }}
-QPushButton#stop_btn:hover {{ background:rgba(224,86,86,0.08); border-color:rgba(224,86,86,0.4); }}
+QPushButton#stop_btn:hover {{ background:rgba(255,51,85,0.1); border-color:{p['red']}; }}
 QPushButton#stop_btn[running="false"] {{ color:{p['grn']}; }}
-QPushButton#stop_btn[running="false"]:hover {{ background:rgba(78,201,148,0.08); border-color:rgba(78,201,148,0.4); }}
-QWidget#stat_card {{ background:{p['bg2']}; border:1px solid {p['line']}; border-radius:8px; }}
+QPushButton#stop_btn[running="false"]:hover {{ background:rgba(0,255,136,0.08); border-color:{p['grn']}; }}
+QWidget#stat_card {{
+    background:qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {p['bg2']}, stop:1 {p['bg3']});
+    border:1px solid {p['line']}; border-radius:10px;
+}}
 QLabel#stat_label {{
-    color:{p['mute2']}; font-size:11px; font-family:'IBM Plex Mono',monospace; letter-spacing:1px;
+    color:{p['mute2']}; font-size:10px; letter-spacing:2px; font-weight:600;
 }}
 QLabel#stat_value {{
-    font-size:22px; font-weight:700; font-family:'IBM Plex Mono',monospace;
-    color:{p['txt']}; letter-spacing:-0.5px;
+    font-size:26px; font-weight:700; color:{p['txt']}; letter-spacing:-0.5px;
 }}
-QWidget#table_card {{ background:{p['bg2']}; border:1px solid {p['line']}; border-radius:8px; }}
+QWidget#table_card {{
+    background:{p['bg2']}; border:1px solid {p['line']}; border-radius:10px;
+}}
 QLabel#section_label {{
-    color:{p['mute2']}; font-size:11px; font-family:'IBM Plex Mono',monospace; letter-spacing:1px;
+    color:{p['grn']}; font-size:10px; letter-spacing:2px; font-weight:700;
 }}
 QPushButton#export_btn {{
     background:{p['bg3']}; border:1px solid {p['line']}; border-radius:4px;
-    color:{p['mute2']}; font-size:11px; font-family:'IBM Plex Mono',monospace; padding:4px 12px;
+    color:{p['mute2']}; font-size:11px; padding:5px 14px;
 }}
-QPushButton#export_btn:hover {{ border-color:{p['mute']}; color:{p['txt']}; }}
+QPushButton#export_btn:hover {{ border-color:{p['blue']}; color:{p['blue']}; }}
 QTableWidget {{
     background:transparent; border:none; gridline-color:{p['line']};
-    color:{p['txt']}; font-family:'IBM Plex Mono',monospace; font-size:12px;
-    selection-background-color:{p['bg3']}; outline:none;
+    color:{p['txt']}; font-size:12px;
+    selection-background-color:rgba(0,255,136,0.08); outline:none;
+    alternate-background-color:{p['bg3']};
 }}
 QTableWidget::item {{ padding:7px 14px; border-bottom:1px solid {p['line']}; }}
-QTableWidget::item:selected {{ background:{p['bg3']}; color:{p['txt']}; }}
+QTableWidget::item:selected {{ background:rgba(0,255,136,0.1); color:{p['grn']}; }}
 QHeaderView::section {{
-    background:{p['bg2']}; color:{p['mute']}; font-family:'IBM Plex Mono',monospace;
-    font-size:10px; letter-spacing:1.5px; padding:6px 14px;
+    background:{p['bg2']}; color:{p['grn']};
+    font-size:9px; letter-spacing:2px; padding:8px 14px; font-weight:700;
     border:none; border-bottom:1px solid {p['line']};
 }}
-QScrollBar:vertical {{ background:{p['bg2']}; width:6px; border:none; }}
-QScrollBar::handle:vertical {{ background:{p['line']}; border-radius:3px; min-height:24px; }}
+QScrollBar:vertical {{ background:{p['bg']}; width:5px; border:none; }}
+QScrollBar::handle:vertical {{ background:{p['line']}; border-radius:2px; min-height:30px; }}
+QScrollBar::handle:vertical:hover {{ background:{p['grn']}; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
+QScrollBar:horizontal {{ background:{p['bg']}; height:5px; border:none; }}
+QScrollBar::handle:horizontal {{ background:{p['line']}; border-radius:2px; min-width:30px; }}
+QScrollBar::handle:horizontal:hover {{ background:{p['grn']}; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0; }}
 QFrame#divider {{ background:{p['line']}; border:none; max-height:1px; min-height:1px; }}
-QWidget#alert_banner {{ background:rgba(224,86,86,0.07); border-left:2px solid {p['red']}; border-radius:0 4px 4px 0; }}
-QLabel#alert_text {{ color:{p['txt']}; font-size:11px; font-family:'IBM Plex Mono',monospace; }}
-QWidget#chart_card {{ background:{p['bg2']}; border:1px solid {p['line']}; border-radius:8px; }}
+QWidget#alert_banner {{
+    background:rgba(255,51,85,0.08); border-left:3px solid {p['red']};
+    border-radius:0 6px 6px 0;
+}}
+QLabel#alert_text {{ color:{p['red']}; font-size:11px; font-weight:600; }}
+QWidget#chart_card {{
+    background:{p['bg2']}; border:1px solid {p['line']}; border-radius:10px;
+}}
 QWidget#page {{ background:{p['bg']}; }}
 QWidget#settings_page {{ background:{p['bg']}; }}
 QLineEdit {{
     background:{p['bg3']}; color:{p['txt']}; border:1px solid {p['line']};
-    border-radius:4px; padding:6px 10px; font-family:'IBM Plex Mono',monospace; font-size:12px;
+    border-radius:4px; padding:8px 12px; font-size:12px;
 }}
+QLineEdit:focus {{ border-color:{p['grn']}; }}
 QComboBox {{
     background:{p['bg3']}; color:{p['txt']}; border:1px solid {p['line']};
-    border-radius:4px; padding:4px 8px; font-family:'IBM Plex Mono',monospace; font-size:12px;
+    border-radius:4px; padding:6px 10px; font-size:12px;
 }}
+QComboBox:hover {{ border-color:{p['blue']}; }}
+QComboBox QAbstractItemView {{ background:{p['bg2']}; color:{p['txt']}; border:1px solid {p['line']}; }}
 QSpinBox {{
     background:{p['bg3']}; color:{p['txt']}; border:1px solid {p['line']};
-    border-radius:4px; padding:4px 8px; font-family:'IBM Plex Mono',monospace; font-size:12px;
+    border-radius:4px; padding:6px 10px; font-size:12px;
 }}
-QCheckBox {{ color:{p['txt']}; font-family:'IBM Plex Mono',monospace; font-size:12px; spacing:8px; }}
+QSpinBox:focus {{ border-color:{p['grn']}; }}
+QCheckBox {{ color:{p['txt']}; font-size:12px; spacing:8px; }}
+QCheckBox::indicator {{ width:16px; height:16px; border:1px solid {p['line']}; border-radius:3px; background:{p['bg3']}; }}
+QCheckBox::indicator:checked {{ background:{p['grn']}; border-color:{p['grn']}; }}
 QGroupBox {{
-    color:{p['txt']}; border:1px solid {p['line']}; border-radius:8px;
-    margin-top:10px; padding-top:20px; font-family:'IBM Plex Mono',monospace;
+    color:{p['grn']}; border:1px solid {p['line']}; border-radius:10px;
+    margin-top:12px; padding-top:22px; font-weight:700; letter-spacing:1px;
 }}
-QGroupBox::title {{ subcontrol-origin:margin; left:10px; padding:0 5px; }}
+QGroupBox::title {{ subcontrol-origin:margin; left:12px; padding:0 6px; }}
+QMenu {{ background:{p['bg2']}; color:{p['txt']}; border:1px solid {p['line']}; border-radius:6px; padding:4px; }}
+QMenu::item {{ padding:6px 20px; border-radius:4px; }}
+QMenu::item:selected {{ background:{p['bg3']}; color:{p['grn']}; }}
 """
 
 
 # ── Tag / color helpers ────────────────────────────────────────────────────────
 
 ATTACK_COLORS = {
-    "deauth":       ("#e05656","rgba(224,86,86,0.12)","rgba(224,86,86,0.28)"),
-    "evil twin":    ("#c8942a","rgba(200,148,42,0.12)","rgba(200,148,42,0.28)"),
-    "evil_twin":    ("#c8942a","rgba(200,148,42,0.12)","rgba(200,148,42,0.28)"),
-    "pmkid":        ("#9d7cd8","rgba(157,124,216,0.12)","rgba(157,124,216,0.28)"),
-    "probe flood":  ("#5a8fd8","rgba(90,143,216,0.12)","rgba(90,143,216,0.28)"),
-    "probe_flood":  ("#5a8fd8","rgba(90,143,216,0.12)","rgba(90,143,216,0.28)"),
-    "beacon flood": ("#5a8fd8","rgba(90,143,216,0.12)","rgba(90,143,216,0.28)"),
-    "beacon_flood": ("#5a8fd8","rgba(90,143,216,0.12)","rgba(90,143,216,0.28)"),
-    "targeted_deauth": ("#e05656","rgba(224,86,86,0.12)","rgba(224,86,86,0.28)"),
+    "deauth":       ("#ff3355","rgba(255,51,85,0.12)","rgba(255,51,85,0.28)"),
+    "evil twin":    ("#ffaa00","rgba(255,170,0,0.12)","rgba(255,170,0,0.28)"),
+    "evil_twin":    ("#ffaa00","rgba(255,170,0,0.12)","rgba(255,170,0,0.28)"),
+    "pmkid":        ("#bf5af2","rgba(191,90,242,0.12)","rgba(191,90,242,0.28)"),
+    "probe flood":  ("#00d4ff","rgba(0,212,255,0.12)","rgba(0,212,255,0.28)"),
+    "probe_flood":  ("#00d4ff","rgba(0,212,255,0.12)","rgba(0,212,255,0.28)"),
+    "beacon flood": ("#00d4ff","rgba(0,212,255,0.12)","rgba(0,212,255,0.28)"),
+    "beacon_flood": ("#00d4ff","rgba(0,212,255,0.12)","rgba(0,212,255,0.28)"),
+    "targeted_deauth": ("#ff3355","rgba(255,51,85,0.12)","rgba(255,51,85,0.28)"),
 }
-SEV_COLORS = {"crit":"#e05656","high":"#c8942a","med":"#666666","medium":"#c8942a","low":"#4ec994"}
+
+SEV_COLORS = {"low": "#00ff88", "medium": "#ffaa00", "high": "#ff3355", "critical": "#bf5af2"}
 
 
 class TagLabel(QLabel):
@@ -208,7 +242,10 @@ class BarChart(QWidget):
         max_val = max(v for v, _ in self.data) or 1
         gap = 3; bar_w = max(4, (w - gap * (n - 1)) // n)
         for i, (val, color) in enumerate(self.data):
-            bar_h = int((val / max_val) * (h - 4))
+            if val == 0:
+                bar_h = max(2, int(h * 0.15))
+            else:
+                bar_h = max(int(h * 0.15), int((val / max_val) * (h - 4)))
             x = i * (bar_w + gap); y = h - bar_h
             p.setBrush(QBrush(QColor(color))); p.setPen(Qt.NoPen)
             p.drawRoundedRect(x, y, bar_w, bar_h, 2, 2)
@@ -222,11 +259,12 @@ class MiniBar(QWidget):
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
         w = self.width()
-        p.setBrush(QBrush(QColor("#1e1e1e"))); p.setPen(Qt.NoPen)
+        track = QColor(DARK["track"] if True else LIGHT["track"])
+        p.setBrush(QBrush(track)); p.setPen(Qt.NoPen)
         p.drawRoundedRect(0, 0, w, 4, 2, 2)
         fill_w = int(w * self.pct / 100)
         if fill_w > 0:
-            c = QColor(self.color); c.setAlphaF(0.75)
+            c = QColor(self.color); c.setAlphaF(0.85)
             p.setBrush(QBrush(c)); p.drawRoundedRect(0, 0, fill_w, 4, 2, 2)
 
 
@@ -274,8 +312,8 @@ class DashboardPage(QWidget):
         # stat cards row
         stat_row = QHBoxLayout(); stat_row.setSpacing(10)
         self.stat_total   = StatCard("total", "0")
-        self.stat_24h     = StatCard("last 24h", "0", "#e05656")
-        self.stat_flagged = StatCard("flagged MACs", "0", "#c8942a")
+        self.stat_24h     = StatCard("last 24h", "0", "#ff3355")
+        self.stat_flagged = StatCard("flagged MACs", "0", "#ffaa00")
         self.stat_nets    = StatCard("networks", "0")
         for c in [self.stat_total, self.stat_24h, self.stat_flagged, self.stat_nets]:
             stat_row.addWidget(c)
@@ -389,11 +427,11 @@ class DashboardPage(QWidget):
             # target
             target = row_data.get("target", "broadcast")
             tgt = QTableWidgetItem(target); tgt.setFont(QFont("IBM Plex Mono", 11))
-            tgt.setForeground(QColor("#e05656") if target == "your device" else QColor("#666666"))
+            tgt.setForeground(QColor("#ff3355") if target == "your device" else QColor("#666666"))
             self.table.setItem(r, 3, tgt)
             # ssid
             s = QTableWidgetItem(row_data.get("ssid", "—"))
-            s.setFont(QFont("IBM Plex Mono", 12)); s.setForeground(QColor("#c8c8c8"))
+            s.setFont(QFont("IBM Plex Mono", 12)); s.setForeground(QColor("#e8eef2"))
             self.table.setItem(r, 4, s)
             # severity
             sev = row_data.get("severity", "low")
@@ -555,16 +593,221 @@ class SettingsPage(QWidget):
         lay.addStretch()
 
 
-# ── Placeholder pages ───────────────────────────────────────────────────────────
+# ── Network Map page ────────────────────────────────────────────────────────────
 
-class PlaceholderPage(QWidget):
-    def __init__(self, name, parent=None):
+class NetworkMapPage(QWidget):
+    """Displays nearby access points detected from beacon frames."""
+
+    SIGNAL_COLORS = {
+        "good": "#00ff88",    # > -50 dBm
+        "fair": "#ffaa00",    # -50 to -70
+        "weak": "#ff3355",    # < -70
+    }
+
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("page")
-        lay = QVBoxLayout(self)
-        lbl = QLabel(name); lbl.setAlignment(Qt.AlignCenter)
-        lbl.setStyleSheet("color:#4a4a4a;font-size:13px;font-family:'IBM Plex Mono',monospace;")
-        lay.addWidget(lbl)
+        lay = QVBoxLayout(self); lay.setContentsMargins(18, 18, 18, 18); lay.setSpacing(10)
+
+        # Header row
+        hdr = QHBoxLayout(); hdr.setSpacing(8)
+        title = QLabel("NETWORK MAP"); title.setObjectName("section_label")
+        hdr.addWidget(title); hdr.addStretch()
+        self.ap_count_lbl = QLabel("0 APs")
+        self.ap_count_lbl.setStyleSheet(
+            "color:#4a4a4a;font-size:11px;font-family:'IBM Plex Mono',monospace;")
+        hdr.addWidget(self.ap_count_lbl)
+        self.refresh_btn = QPushButton("refresh"); self.refresh_btn.setObjectName("export_btn")
+        hdr.addWidget(self.refresh_btn)
+        lay.addLayout(hdr)
+
+        # AP table
+        self.table = QTableWidget(); self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(["BSSID", "VENDOR", "SSID", "CH", "SIGNAL", "ENC"])
+        self.table.setSortingEnabled(True)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.setColumnWidth(0, 160); self.table.setColumnWidth(1, 140)
+        self.table.setColumnWidth(3, 50); self.table.setColumnWidth(4, 90)
+        self.table.setColumnWidth(5, 100)
+        lay.addWidget(self.table, 1)
+
+    def load_aps(self, nearby_aps: dict):
+        """nearby_aps: {bssid: {ssid, channel, signal, last_seen, encryption}}"""
+        self.table.setSortingEnabled(False)
+        self.table.setRowCount(len(nearby_aps))
+        for row, (bssid, info) in enumerate(nearby_aps.items()):
+            self.table.setRowHeight(row, 36)
+            # BSSID
+            b = QTableWidgetItem(bssid.upper())
+            b.setFont(QFont("IBM Plex Mono", 11)); b.setForeground(QColor("#e8eef2"))
+            self.table.setItem(row, 0, b)
+            # Vendor
+            vendor = lookup_vendor(bssid)
+            v = QTableWidgetItem(vendor if vendor else "unknown")
+            v.setFont(QFont("IBM Plex Mono", 11))
+            v.setForeground(QColor("#00d4ff") if vendor else QColor("#4a4a4a"))
+            self.table.setItem(row, 1, v)
+            # SSID
+            s = QTableWidgetItem(info.get("ssid", "Hidden"))
+            s.setFont(QFont("IBM Plex Mono", 12)); s.setForeground(QColor("#e8eef2"))
+            self.table.setItem(row, 2, s)
+            # Channel
+            ch = QTableWidgetItem(str(info.get("channel", "?")))
+            ch.setFont(QFont("IBM Plex Mono", 11)); ch.setForeground(QColor("#00d4ff"))
+            ch.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 3, ch)
+            # Signal (color-coded)
+            sig = info.get("signal", -100)
+            if sig > -50:
+                color = self.SIGNAL_COLORS["good"]
+            elif sig > -70:
+                color = self.SIGNAL_COLORS["fair"]
+            else:
+                color = self.SIGNAL_COLORS["weak"]
+            si = QTableWidgetItem(f"{sig} dBm")
+            si.setFont(QFont("IBM Plex Mono", 11)); si.setForeground(QColor(color))
+            si.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 4, si)
+            # Encryption
+            enc = info.get("encryption", "?")
+            ei = QTableWidgetItem(enc)
+            ei.setFont(QFont("IBM Plex Mono", 11))
+            ei.setForeground(QColor("#00ff88") if "WPA" in enc else QColor("#ff3355"))
+            ei.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 5, ei)
+        self.table.setSortingEnabled(True)
+        self.ap_count_lbl.setText(f"{len(nearby_aps)} APs")
+
+
+# ── Analytics page ──────────────────────────────────────────────────────────────
+
+class HeatmapCell(QWidget):
+    """Single cell in the hourly heatmap."""
+    def __init__(self, value=0, max_val=1, parent=None):
+        super().__init__(parent)
+        self.value = value; self.max_val = max(max_val, 1)
+        self.setFixedSize(28, 28); self.setToolTip(f"{value} attacks")
+
+    def paintEvent(self, e):
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        ratio = min(self.value / self.max_val, 1.0)
+        if ratio > 0.7:
+            color = QColor(224, 86, 86, int(80 + 175 * ratio))
+        elif ratio > 0.3:
+            color = QColor(200, 148, 42, int(60 + 175 * ratio))
+        elif ratio > 0:
+            color = QColor(78, 201, 148, int(40 + 140 * ratio))
+        else:
+            color = QColor(30, 30, 30, 120)
+        p.setBrush(QBrush(color)); p.setPen(Qt.NoPen)
+        p.drawRoundedRect(1, 1, 26, 26, 4, 4)
+        if self.value > 0:
+            p.setPen(QPen(QColor(255, 255, 255, 200)))
+            p.setFont(QFont("IBM Plex Mono", 8))
+            p.drawText(self.rect(), Qt.AlignCenter, str(self.value))
+
+
+class AnalyticsPage(QWidget):
+    """Attack analytics: top attackers, type breakdown, hourly heatmap."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("page")
+        lay = QVBoxLayout(self); lay.setContentsMargins(18, 18, 18, 18); lay.setSpacing(14)
+
+        title = QLabel("ANALYTICS"); title.setObjectName("section_label")
+        lay.addWidget(title)
+
+        # ── Top section: attackers table + type breakdown side by side
+        top_row = QHBoxLayout(); top_row.setSpacing(12)
+
+        # Top 10 Attackers card
+        atk_card = QWidget(); atk_card.setObjectName("table_card")
+        atk_lay = QVBoxLayout(atk_card); atk_lay.setContentsMargins(14, 12, 14, 12); atk_lay.setSpacing(6)
+        atk_title = QLabel("TOP ATTACKERS"); atk_title.setObjectName("section_label")
+        atk_lay.addWidget(atk_title)
+        self.attackers_table = QTableWidget(); self.attackers_table.setColumnCount(4)
+        self.attackers_table.setHorizontalHeaderLabels(["MAC", "VENDOR", "COUNT", "FLAG"])
+        self.attackers_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.attackers_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.attackers_table.setShowGrid(False)
+        self.attackers_table.verticalHeader().setVisible(False)
+        self.attackers_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.attackers_table.setColumnWidth(1, 120); self.attackers_table.setColumnWidth(2, 60)
+        self.attackers_table.setColumnWidth(3, 50)
+        atk_lay.addWidget(self.attackers_table, 1)
+        top_row.addWidget(atk_card, 3)
+
+        # Type breakdown card
+        type_card = QWidget(); type_card.setObjectName("chart_card")
+        self._type_lay = QVBoxLayout(type_card)
+        self._type_lay.setContentsMargins(14, 12, 14, 12); self._type_lay.setSpacing(10)
+        type_title = QLabel("ATTACK TYPES"); type_title.setObjectName("section_label")
+        self._type_lay.addWidget(type_title)
+        self._type_lay.addStretch()
+        top_row.addWidget(type_card, 1)
+
+        lay.addLayout(top_row, 3)
+
+
+    def load_top_attackers(self, attacker_data: list, flagged_macs: set):
+        """attacker_data: list of (mac, count) sorted descending."""
+        self.attackers_table.setRowCount(len(attacker_data))
+        for row, (mac, count) in enumerate(attacker_data[:10]):
+            self.attackers_table.setRowHeight(row, 34)
+            # MAC
+            mi = QTableWidgetItem(mac.upper())
+            mi.setFont(QFont("IBM Plex Mono", 11)); mi.setForeground(QColor("#e8eef2"))
+            self.attackers_table.setItem(row, 0, mi)
+            # Vendor
+            vendor = lookup_vendor(mac)
+            vi = QTableWidgetItem(vendor if vendor else "—")
+            vi.setFont(QFont("IBM Plex Mono", 10))
+            vi.setForeground(QColor("#00d4ff") if vendor else QColor("#4a4a4a"))
+            self.attackers_table.setItem(row, 1, vi)
+            # Count
+            ci = QTableWidgetItem(str(count))
+            ci.setFont(QFont("IBM Plex Mono", 12, QFont.Bold))
+            ci.setForeground(QColor("#ff3355")); ci.setTextAlignment(Qt.AlignCenter)
+            self.attackers_table.setItem(row, 2, ci)
+            # Flag
+            is_flagged = mac.upper() in flagged_macs
+            fi = QTableWidgetItem("⚠️" if is_flagged else "")
+            fi.setTextAlignment(Qt.AlignCenter)
+            if is_flagged:
+                for col in range(4):
+                    item = self.attackers_table.item(row, col)
+                    if item:
+                        item.setBackground(QColor(40, 10, 15))
+            self.attackers_table.setItem(row, 3, fi)
+
+    def update_type_breakdown(self, type_data: list):
+        """type_data: list of (name, pct, color)"""
+        # Clear old entries (keep first label + stretch)
+        while self._type_lay.count() > 1:
+            item = self._type_lay.takeAt(1)
+            if item.widget(): item.widget().deleteLater()
+            elif item.layout():
+                while item.layout().count():
+                    sub = item.layout().takeAt(0)
+                    if sub.widget(): sub.widget().deleteLater()
+
+        for name, pct, col in type_data:
+            row = QHBoxLayout(); row.setSpacing(8)
+            nl = QLabel(name); nl.setFixedWidth(90)
+            nl.setStyleSheet("font-size:11px;color:#666;font-family:'IBM Plex Mono',monospace;")
+            row.addWidget(nl)
+            mb = MiniBar(pct, col); row.addWidget(mb, 1)
+            pl = QLabel(f"{pct}%"); pl.setFixedWidth(36); pl.setAlignment(Qt.AlignRight)
+            pl.setStyleSheet("font-size:10px;color:#4a4a4a;font-family:'IBM Plex Mono',monospace;")
+            row.addWidget(pl)
+            self._type_lay.insertLayout(self._type_lay.count(), row)
+        self._type_lay.addStretch()
+
 
 
 # ── Main window ─────────────────────────────────────────────────────────────────
@@ -604,6 +847,7 @@ class WiFiMonitorGUI(QMainWindow):
         self._refresh = QTimer(self); self._refresh.timeout.connect(self._poll_db); self._refresh.start(3000)
         self._stats_timer = QTimer(self); self._stats_timer.timeout.connect(self.update_stats); self._stats_timer.start(60000)
         self._analytics_timer = QTimer(self); self._analytics_timer.timeout.connect(self._update_analytics); self._analytics_timer.start(30000)
+        self._netmap_timer = QTimer(self); self._netmap_timer.timeout.connect(self._refresh_network_map); self._netmap_timer.start(10000)
 
         # Auto backup
         if self.drive_uploader:
@@ -670,11 +914,13 @@ class WiFiMonitorGUI(QMainWindow):
         self._dashboard = DashboardPage()
         self._logs_page = LogsPage()
         self._settings_page = SettingsPage(self.detector, self.username)
-        self._stack.addWidget(self._dashboard)     # 0
-        self._stack.addWidget(self._logs_page)      # 1
-        self._stack.addWidget(PlaceholderPage("network map  —  coming soon"))  # 2
-        self._stack.addWidget(PlaceholderPage("threats  —  coming soon"))      # 3
-        self._stack.addWidget(self._settings_page)  # 4
+        self._network_page = NetworkMapPage()
+        self._analytics_page = AnalyticsPage()
+        self._stack.addWidget(self._dashboard)       # 0
+        self._stack.addWidget(self._logs_page)        # 1
+        self._stack.addWidget(self._network_page)     # 2
+        self._stack.addWidget(self._analytics_page)   # 3
+        self._stack.addWidget(self._settings_page)    # 4
         rl.addWidget(self._stack)
         main.addWidget(right)
         self._switch_page(0)
@@ -710,6 +956,9 @@ class WiFiMonitorGUI(QMainWindow):
         sp.ntfy_toggle.stateChanged.connect(self._toggle_ntfy)
         sp.twilio_toggle.stateChanged.connect(self._toggle_twilio)
 
+        # Network map
+        self._network_page.refresh_btn.clicked.connect(self._refresh_network_map)
+
     # ── Navigation & theme ───────────────────────────────────────
 
     def _switch_page(self, idx):
@@ -735,15 +984,40 @@ class WiFiMonitorGUI(QMainWindow):
             iface = "wlan0mon"
             if self.detector:
                 iface = getattr(self.detector, 'interface', 'wlan0mon')
+                # Connect lightweight signals from background sniff thread
+                st = self.detector.sniff_thread
+                st.attack_signal.connect(self._on_attack_detected)
+                st.ap_update_signal.connect(self._refresh_network_map)
                 self.detector.start_monitoring()
             self._status_lbl.setText(f"monitoring  {iface}")
         else:
             self._stop_btn.setText("start"); self._stop_btn.setProperty("running", "false")
             self._status_lbl.setText("stopped")
             if self.detector:
+                st = self.detector.sniff_thread
+                try:
+                    st.attack_signal.disconnect(self._on_attack_detected)
+                    st.ap_update_signal.disconnect(self._refresh_network_map)
+                except TypeError:
+                    pass
                 self.detector.stop_monitoring()
         self._stop_btn.style().unpolish(self._stop_btn); self._stop_btn.style().polish(self._stop_btn)
         logging.info(f"Monitoring {'started' if self._running else 'stopped'}")
+
+    def _on_attack_detected(self, attack: dict):
+        """Lightweight slot called on main thread when attack detected."""
+        self.update_logs()
+        self.update_stats()
+        sev = attack.get("severity", "medium")
+        if sev == "high":
+            atype = attack.get("attack_type", "attack")
+            src = attack.get("src_mac", "unknown")
+            self.show_tray_notification("wifiwatch attack", f"{atype} from {src}", sev)
+
+    def _refresh_network_map(self):
+        """Lightweight slot to refresh network map page."""
+        if hasattr(self, '_network_map_page'):
+            self._network_map_page.refresh(self.detector)
 
     # ── DB polling & data refresh ────────────────────────────────
 
@@ -785,38 +1059,48 @@ class WiFiMonitorGUI(QMainWindow):
                 "SELECT COUNT(*) FROM attacks WHERE timestamp >= datetime('now', '-24 hours', 'localtime')").fetchone()[0]
             flagged = len(self.db.get_flagged_threats())
             self._dashboard.stat_total.set_value(str(total))
-            self._dashboard.stat_24h.set_value(str(recent), "#e05656")
-            self._dashboard.stat_flagged.set_value(str(flagged), "#c8942a")
+            self._dashboard.stat_24h.set_value(str(recent), "#ff3355")
+            self._dashboard.stat_flagged.set_value(str(flagged), "#ffaa00")
         except Exception:
             pass
 
     def update_logs_live(self, packet):
+        """Called from sniff thread — defer all work to main thread."""
         try:
             from scapy.all import Dot11Deauth
             if packet.haslayer(Dot11Deauth):
-                src, dst = packet.addr2, packet.addr1
-                ssid = self.detector.ssid_map.get(src, "Unknown") if self.detector else "Unknown"
-                timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-                attack_type, severity = "deauth", "medium"
+                src = packet.addr2
+                severity = "medium"
                 if self.detector:
-                    attack_type, severity = self.detector._classify_deauth(dst)
-                attack = {"timestamp": timestamp, "src_mac": src, "dst_mac": dst,
-                          "ssid": ssid, "attack_type": attack_type, "severity": severity}
-                self.db.log_attack(attack)
-                self.update_logs()
-                self.update_stats()
+                    _, severity = self.detector._classify_deauth(packet.addr1)
+                # Defer UI refresh to main thread (detector already logs to DB)
+                QTimer.singleShot(0, self.update_logs)
+                QTimer.singleShot(50, self.update_stats)
                 if severity == "high":
-                    self.show_tray_notification("wifiwatch attack", f"{attack_type} from {src}", severity)
+                    attack_type = "deauth"
+                    if self.detector:
+                        attack_type, _ = self.detector._classify_deauth(packet.addr1)
+                    QTimer.singleShot(0, lambda: self.show_tray_notification(
+                        "wifiwatch attack", f"{attack_type} from {src}", severity))
+        except Exception:
+            pass
+
+    def _refresh_network_map(self):
+        """Refresh the network map page from detector's nearby AP data."""
+        try:
+            if self.detector and hasattr(self.detector, 'nearby_aps'):
+                self._network_page.load_aps(self.detector.nearby_aps)
         except Exception:
             pass
 
     def _update_analytics(self):
-        """Refresh bar chart and type breakdown from DB."""
+        """Refresh bar chart, type breakdown, and analytics page from DB."""
         try:
             logs = self.db.get_all_logs()
             # Hourly distribution for bar chart
             hour_counter = Counter()
             type_counter = Counter()
+            mac_counter = Counter()
             for log in logs:
                 ts = log[1]
                 try:
@@ -826,31 +1110,44 @@ class WiFiMonitorGUI(QMainWindow):
                     pass
                 atype = log[5] if len(log) > 5 and log[5] else "deauth"
                 type_counter[atype] += 1
+                src_mac = log[2] if len(log) > 2 else ""
+                if src_mac:
+                    mac_counter[src_mac] += 1
 
             # Build bar chart data (24 hours)
             max_h = max(hour_counter.values()) if hour_counter else 1
             bar_data = []
             for h in range(24):
                 count = hour_counter.get(h, 0)
-                if count > max_h * 0.7:
-                    color = "#e05656"
+                if count == 0:
+                    color = "#2b3b4a"  # Deep blue-gray for zero-value baseline
+                elif count > max_h * 0.7:
+                    color = "#ff3355"
                 elif count > max_h * 0.3:
-                    color = "#c8942a"
+                    color = "#ffaa00"
                 else:
-                    color = "#4ec994"
+                    color = "#00ff88"
                 bar_data.append((count, color))
             self._dashboard.bar_chart.set_data(bar_data)
 
             # Type breakdown
             total = max(len(logs), 1)
-            type_colors = {"deauth": "#e05656", "evil_twin": "#c8942a", "pmkid": "#9d7cd8",
-                           "probe_flood": "#5a8fd8", "beacon_flood": "#5a8fd8", "targeted_deauth": "#e05656"}
+            type_colors = {"deauth": "#ff3355", "evil_twin": "#ffaa00", "pmkid": "#bf5af2",
+                           "probe_flood": "#00d4ff", "beacon_flood": "#00d4ff", "targeted_deauth": "#ff3355"}
             type_data = []
             for atype, count in type_counter.most_common():
                 pct = round(count / total * 100)
                 col = type_colors.get(atype, "#5a5a5a")
                 type_data.append((atype.replace("_", " "), pct, col))
             self._dashboard.update_type_breakdown(type_data)
+
+            # ── Feed analytics page ──
+            # Top attackers
+            flagged_set = {f[0] for f in self.db.get_flagged_threats()}
+            top_attackers = mac_counter.most_common(10)
+            self._analytics_page.load_top_attackers(top_attackers, flagged_set)
+            # Type breakdown (analytics page)
+            self._analytics_page.update_type_breakdown(type_data)
         except Exception:
             pass
 

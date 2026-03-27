@@ -25,30 +25,38 @@ class LoginDialog(QDialog):
         self.setWindowTitle("WiFi Attack Detector — Login")
         self.setFixedSize(420, 380)
         self.setStyleSheet("""
-            QDialog { background-color: #1e1e1e; }
-            QLabel { color: #00ff00; font-size: 14px; }
+            QDialog {
+                background-color: #050a0e;
+                font-family: 'IBM Plex Mono', 'Fira Code', 'Consolas', monospace;
+            }
+            QLabel {
+                color: #b8c4ce; font-size: 12px; letter-spacing: 0.5px;
+            }
             QLineEdit {
-                background-color: #2e2e2e; color: #00ff00;
-                border: 1px solid #444; padding: 8px;
-                font-size: 14px; border-radius: 4px;
+                background-color: #0a1118; color: #b8c4ce;
+                border: 1px solid #0d2137; padding: 10px 12px;
+                font-size: 13px; border-radius: 6px;
+                font-family: 'IBM Plex Mono', monospace;
             }
-            QLineEdit:focus { border: 1px solid #00ff00; }
+            QLineEdit:focus { border: 1px solid #00ff88; }
             QPushButton {
-                background-color: #333; color: #00ff00;
-                border: 1px solid #555; padding: 10px;
-                font-size: 14px; border-radius: 4px;
+                background-color: #0f1a24; color: #3d6070;
+                border: 1px solid #0d2137; padding: 10px;
+                font-size: 12px; border-radius: 6px;
+                font-family: 'IBM Plex Mono', monospace;
+                letter-spacing: 1px;
             }
-            QPushButton:hover { background-color: #444; }
+            QPushButton:hover { border-color: #00ff88; color: #00ff88; }
             QPushButton#primary {
-                background-color: #00aa00; color: #000;
-                font-weight: bold;
+                background-color: #00ff88; color: #050a0e;
+                font-weight: bold; border: none;
             }
-            QPushButton#primary:hover { background-color: #00cc00; }
+            QPushButton#primary:hover { background-color: #00cc6a; }
             QPushButton#switch_btn {
                 background-color: transparent; border: none;
-                color: #00aa00; text-decoration: underline;
+                color: #00d4ff; font-size: 11px;
             }
-            QPushButton#switch_btn:hover { color: #00ff00; }
+            QPushButton#switch_btn:hover { color: #00ff88; }
         """)
 
         main_layout = QVBoxLayout(self)
