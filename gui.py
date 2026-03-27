@@ -1034,6 +1034,7 @@ class WiFiMonitorGUI(QMainWindow):
         if logs != self.last_logs:
             self._dashboard.load_attacks_from_db(logs)
             self.last_logs = logs
+            self.update_all_logs()
 
     def update_all_logs(self):
         logs = self.db.get_all_logs()
