@@ -26,7 +26,7 @@ A Linux-based cybersecurity tool that detects WiFi deauthentication attacks in r
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/yourusername/wifi-attack-detector.git
+git clone https://github.com/Milind027/wifi-attack-detector.git
 cd wifi-attack-detector
 ```
 
